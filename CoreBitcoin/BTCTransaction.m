@@ -429,19 +429,85 @@ NSString* BTCTransactionIDFromHash(NSData* txhash) {
     
     // Important: we have to hash transaction together with its hash type.
     // Hash type is appended as little endian uint32 unlike 1-byte suffix of the signature.
-    NSMutableData* fulldata = [tx.data mutableCopy];
-    uint32_t hashType32 = OSSwapHostToLittleInt32((uint32_t)hashType);
-    [fulldata appendBytes:&hashType32 length:sizeof(hashType32)];
-    
-    NSData* hash = BTCHash256(fulldata);
-    
-//    NSLog(@"\n----------------------\n");
-//    NSLog(@"TX: %@", BTCHexFromData(fulldata));
-//    NSLog(@"TX SUBSCRIPT: %@ (%@)", BTCHexFromData(subscript.data), subscript);
-//    NSLog(@"TX HASH: %@", BTCHexFromData(hash));
-//    NSLog(@"TX PLIST: %@", tx.dictionary);
-    
-    return hash;
+    if (hashType != BTCSignatureHashTypeBCH) {
+        NSMutableData* fulldata = [tx.data mutableCopy];
+        uint32_t hashType32 = OSSwapHostToLittleInt32((uint32_t)hashType);
+        [fulldata appendBytes:&hashType32 length:sizeof(hashType32)];
+        
+        NSData* hash = BTCHash256(fulldata);
+        
+    //    NSLog(@"\n----------------------\n");
+    //    NSLog(@"TX: %@", BTCHexFromData(fulldata));
+    //    NSLog(@"TX SUBSCRIPT: %@ (%@)", BTCHexFromData(subscript.data), subscript);
+    //    NSLog(@"TX HASH: %@", BTCHexFromData(hash));
+    //    NSLog(@"TX PLIST: %@", tx.dictionary);
+        
+        return hash;
+    } else {
+        BTCTransactionInput* input = self.inputs[inputIndex];
+        
+        NSMutableData* fulldata = [NSMutableData new];
+        
+        // 1. nVersion (4-byte)
+        uint32_t ver = _version;
+        [fulldata appendBytes: &ver length: 4];
+        
+        // 2. hashPrevouts
+        NSMutableData* hashPrevouts = [NSMutableData new];
+        for (BTCTransactionInput* input in self.inputs) {
+            [hashPrevouts appendData: input.previousHash];
+            uint32_t index = input.previousIndex;
+            [hashPrevouts appendBytes: &index length: 4];
+        }
+        NSData* hashPrevouts256 = BTCHash256(hashPrevouts);
+        [fulldata appendData: hashPrevouts256];
+        
+        // 3. hashSequence
+        NSMutableData* hashSequence = [NSMutableData new];
+        for (BTCTransactionInput* input in self.inputs) {
+            uint32_t sequence = input.sequence;
+            [hashSequence appendBytes: &sequence length: 4];
+        }
+        NSData* hashSequence256 = BTCHash256(hashSequence);
+        [fulldata appendData: hashSequence256];
+        
+        // 4. outpoint [of the input txin]
+        [fulldata appendData: input.previousHash];
+        uint32_t index = input.previousIndex;
+        [fulldata appendBytes: &index length: 4];
+        
+        // 5. scriptCode [of the input txout]
+        NSData* scriptData = subscript.data ?: [NSData data];
+        [fulldata appendData:[BTCProtocolSerialization dataForVarInt:scriptData.length]];
+        [fulldata appendData:scriptData];
+        
+        // 6. value [of the input txout] (8-byte)
+        int64_t value = input.value;
+        [fulldata appendBytes: &value length: 8];
+        
+        // 7. nSequence [of the input txin] (4-byte)
+        int64_t sequence = input.sequence;
+        [fulldata appendBytes: &sequence length: 4];
+        
+        // 8. hashOutputs
+        NSMutableData* hashOutputs = [NSMutableData new];
+        for (BTCTransactionOutput* output in self.outputs) {
+            [hashOutputs appendData: output.data];
+        }
+        NSData* hashOutputs256 = BTCHash256(hashOutputs);
+        [fulldata appendData: hashOutputs256];
+        
+        // 9. nLocktime (4-byte)
+        uint32_t lockTime = self.lockTime;
+        [fulldata appendBytes: &lockTime length: 4];
+        
+        // 10. Sighash types [This time input] (4-byte)
+        uint32_t hashType32 = OSSwapHostToLittleInt32((uint32_t)hashType);
+        [fulldata appendBytes:&hashType32 length:sizeof(hashType32)];
+        
+        NSData* hash = BTCHash256(fulldata);
+        return hash;
+    }
 }
 
 
