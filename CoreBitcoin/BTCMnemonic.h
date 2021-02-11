@@ -42,6 +42,9 @@ typedef NS_ENUM(int8_t, BTCMnemonicWordListType) {
 // Binary representation of the mnemonic with computed seed appended (so it can be cached).
 @property(nonatomic, readonly) NSData* dataWithSeed;
 
+// Returns list of words used for mnemonic generation
++ (NSArray*) wordListForType:(BTCMnemonicWordListType)type;
+
 // Inits mnemonic with a raw entropy buffer, optional password and a wordlist.
 // If `password` is nil, it is treated as an empty string.
 // `entropy` length in bits must be divisible by 32 (128, 160, 192, 224, 256 bits).
